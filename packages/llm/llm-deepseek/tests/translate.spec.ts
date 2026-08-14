@@ -328,6 +328,22 @@ describe('translate: defensive tool-call branches', () => {
     ])
   })
 
+  it('keeps the first name/id when later deltas re-send them as empty strings (DeepSeek-V4 streaming)', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_x', type: 'function', function: { name: 'get_weather', arguments: '' } }] } }] },
+      // DeepSeek-V4-Flash/Pro re-send `id`/`function.name` as empty strings on
+      // every later delta; they must not wipe the values the first delta set.
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: '', function: { name: '', arguments: '{"city"' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: '', function: { name: '', arguments: ': "Paris"}' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+      DONE,
+    )))
+    expect(chunks.filter(chunk => chunk.type === 'block-end')).toEqual([
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_x', name: 'get_weather', arguments: '{"city": "Paris"}' } },
+    ])
+  })
+
   it('handles tool_call deltas with a function object but no arguments field', async () => {
     const chunks = await collect(translate(feed(
       firstChunk,
